@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local configuration / secrets
+.env
+.env.*
+!.env.example
+
+# Runtime state
+*.pid
+*.log
+otp-session.json
+2fa.json
+
+# Development backups
+*.bak
+*.bak-*
+*~
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
