@@ -20,7 +20,10 @@ The canary performs these read-only stages:
 It never creates, updates or deletes DNS records.
 
 The canary output is deliberately sanitized. It does not include domain names,
-credentials, cookies, OTP values, authenticated HTML or response bodies.
+credentials, cookies, OTP values, authenticated HTML or response bodies. The
+GitHub-hosted workflow publishes only status, stage and reason; account product
+and DNS-record counts remain in the local canary JSON and are not surfaced in
+public workflow output or drift issues.
 
 ## Exit codes
 
@@ -33,7 +36,8 @@ credentials, cookies, OTP values, authenticated HTML or response bodies.
 | 1 | error | Unexpected internal canary failure. |
 
 Transient failures are retried by the GitHub Actions workflow before the run is
-marked failed.
+marked failed. GitHub-hosted runner regions can vary, so an isolated transient
+network failure is not classified as protocol drift.
 
 Only exit code 30 creates or updates the public upstream-drift issue. A later
 successful run comments on and closes that issue automatically.

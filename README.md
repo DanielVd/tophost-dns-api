@@ -1,6 +1,7 @@
 # Tophost DNS API
 
 [![CI](https://github.com/DanielVd/tophost-dns-api/actions/workflows/ci.yml/badge.svg)](https://github.com/DanielVd/tophost-dns-api/actions/workflows/ci.yml)
+[![Upstream Canary](https://github.com/DanielVd/tophost-dns-api/actions/workflows/upstream-canary.yml/badge.svg)](https://github.com/DanielVd/tophost-dns-api/actions/workflows/upstream-canary.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Unofficial REST API for managing DNS records on Tophost accounts.
@@ -363,5 +364,6 @@ for:
 - delete;
 - final absence verification.
 
-The project is currently intended for controlled use and further testing before
-a public release.
+Version `0.1.0` is an experimental public release. It has been validated against
+a real Tophost account, including read-only discovery and DNS CRUD, but it relies
+on unofficial reverse-engineered web flows that may change without notice.

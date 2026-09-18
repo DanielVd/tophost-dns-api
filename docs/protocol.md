@@ -74,13 +74,18 @@ host instead of trusting an arbitrary redirect destination.
 
 The DNS page renders records as HTML table rows.
 
-Each record exposes:
+Most record rows expose:
 
 - record identifier;
 - name;
 - type;
 - value;
 - priority.
+
+Tophost also renders zone-apex records in `table#dns-soa`. Those rows may omit
+the per-record name field entirely; in that table only, the parser uses the
+selected zone name as the record name. A nameless DNS row outside
+`table#dns-soa` is treated as an upstream protocol error rather than guessed.
 
 The record identifier is an upstream implementation detail but is required to
 address individual records.
