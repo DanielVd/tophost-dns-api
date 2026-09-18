@@ -15,6 +15,7 @@ from tophost_api.errors import (
     OTPInvalidError,
     OTPRequiredError,
     UpstreamProtocolError,
+    UpstreamUnavailableError,
 )
 from tophost_api.models import (
     AuthStatus,
@@ -385,6 +386,15 @@ class TophostAccountClient:
 
     @staticmethod
     def _raise_for_http_error(response) -> None:
+        if (
+            response.status_code in {408, 425, 429}
+            or response.status_code >= 500
+        ):
+            raise UpstreamUnavailableError(
+                "Tophost is temporarily unavailable: "
+                f"HTTP {response.status_code}"
+            )
+
         if response.status_code >= 400:
             raise UpstreamProtocolError(
                 "Unexpected Tophost HTTP response: "

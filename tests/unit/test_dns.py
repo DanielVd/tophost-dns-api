@@ -12,7 +12,11 @@ from tophost_api.client.dns import (
     TophostDNSClient,
 )
 from tophost_api.client.session import TophostHTTPSession
-from tophost_api.errors import RecordChangedError
+from tophost_api.errors import (
+    RecordChangedError,
+    UpstreamProtocolError,
+    UpstreamUnavailableError,
+)
 from tophost_api.models import (
     DNSRecordCreate,
     DNSRecordPatch,
@@ -132,6 +136,20 @@ def test_dns_page_parser():
     assert record.priority == 0
 
 
+def test_dns_page_parser_rejects_partial_record():
+    html = f"""
+    <table>
+      <tr id="tr-{RECORD_ID}">
+        <td id="name-{RECORD_ID}">mcp</td>
+        <td id="type-{RECORD_ID}">A</td>
+      </tr>
+    </table>
+    """
+
+    with pytest.raises(UpstreamProtocolError):
+        DNSPageParser().parse(html)
+
+
 @responses.activate
 def test_connect_follows_sso():
     mock_sso()
@@ -143,6 +161,51 @@ def test_connect_follows_sso():
     assert client.connected is True
     assert product.domain == "example.com"
     assert product.product_id == "1234567"
+
+
+@responses.activate
+def test_connect_accepts_pre_resolved_product(monkeypatch):
+    mock_sso()
+
+    client = make_client()
+
+    product = TophostProduct(
+        domain="example.com",
+        product_id="1234567",
+        control_panel_href=(
+            "https://www.tophost.it/myth/"
+            "index_th.php?func=dd1234567"
+        ),
+    )
+
+    monkeypatch.setattr(
+        client.account,
+        "resolve_product",
+        lambda domain: pytest.fail(
+            "resolve_product must not be called"
+        ),
+    )
+
+    result = client.connect(
+        product=product
+    )
+
+    assert result == product
+    assert client.connected is True
+
+
+@responses.activate
+def test_connect_treats_server_error_as_unavailable():
+    responses.get(
+        "https://www.tophost.it/myth/"
+        "index_th.php?func=dd1234567",
+        status=503,
+    )
+
+    client = make_client()
+
+    with pytest.raises(UpstreamUnavailableError):
+        client.connect()
 
 
 @responses.activate

@@ -12,6 +12,7 @@ from tophost_api.errors import (
     RecordChangedError,
     RecordNotFoundError,
     UpstreamProtocolError,
+    UpstreamUnavailableError,
 )
 from tophost_api.models import (
     DNSMutationResult,
@@ -68,7 +69,9 @@ class DNSPageParser:
             )
 
             if name is None or record_type is None or value is None:
-                continue
+                raise UpstreamProtocolError(
+                    "Tophost DNS record row has an unexpected structure"
+                )
 
             priority_input = row.find(
                 "input",
@@ -139,10 +142,19 @@ class TophostDNSClient:
         self.product: TophostProduct | None = None
         self.connected = False
 
-    def connect(self) -> TophostProduct:
-        product = self.account.resolve_product(
-            self.domain
-        )
+    def connect(
+        self,
+        *,
+        product: TophostProduct | None = None,
+    ) -> TophostProduct:
+        if product is None:
+            product = self.account.resolve_product(
+                self.domain
+            )
+        elif product.domain != self.domain:
+            raise UpstreamProtocolError(
+                "Pre-resolved Tophost product does not match requested domain"
+            )
 
         response = self.account.http.get(
             product.control_panel_href,
@@ -443,6 +455,15 @@ class TophostDNSClient:
     def _check_http_response(
         response,
     ) -> None:
+        if (
+            response.status_code in {408, 425, 429}
+            or response.status_code >= 500
+        ):
+            raise UpstreamUnavailableError(
+                "Tophost control panel is temporarily unavailable: "
+                f"HTTP {response.status_code}"
+            )
+
         if response.status_code >= 400:
             raise UpstreamProtocolError(
                 "Unexpected Tophost control-panel HTTP response: "
