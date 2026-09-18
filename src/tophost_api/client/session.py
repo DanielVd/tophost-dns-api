@@ -124,7 +124,7 @@ class TophostHTTPSession:
                 "Tophost request timed out",
                 reason="timeout",
             ) from exc
-        except requests.SSLError as exc:
+        except requests.exceptions.SSLError as exc:
             raise UpstreamUnavailableError(
                 "Tophost TLS connection failed",
                 reason="tls_error",
