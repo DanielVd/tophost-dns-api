@@ -37,13 +37,17 @@ jobs:
       - name: Restore trusted 2FA state
         env:
           TOPHOST_TRUST_B64: ${{ secrets.TOPHOST_TRUST_B64 }}
+        shell: bash
         run: |
-          install -d -m 700 "$RUNNER_TEMP/tophost-state"
+          state_dir="$RUNNER_TEMP/tophost-state"
+          trust_file="$state_dir/2fa.json"
+
+          install -d -m 700 "$state_dir"
 
           if [[ -n "$TOPHOST_TRUST_B64" ]]; then
-            printf '%s' "$TOPHOST_TRUST_B64"               | base64 --decode               > "$RUNNER_TEMP/tophost-state/2fa.json"
-            chmod 600 "$RUNNER_TEMP/tophost-state/2fa.json"
-            python -m json.tool               "$RUNNER_TEMP/tophost-state/2fa.json"               >/dev/null
+            printf '%s' "$TOPHOST_TRUST_B64" | base64 --decode > "$trust_file"
+            chmod 600 "$trust_file"
+            python -m json.tool "$trust_file" >/dev/null
           fi
 
       - name: Run read-only compatibility canary
@@ -77,10 +81,7 @@ jobs:
 
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
 
-          python - \
-            "$result" \
-            "$GITHUB_OUTPUT" \
-            "$GITHUB_STEP_SUMMARY" <<'PY'
+          python - "$result" "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY" <<'PY'
           import json
           import sys
 
@@ -129,36 +130,36 @@ jobs:
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
           issue_number="$(
-            gh issue list               --repo "$GITHUB_REPOSITORY"               --state open               --limit 100               --json number,title               --jq '.[] | select(.title == "[canary] Tophost upstream compatibility drift") | .number'               | head -n 1
+            gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100               --json number,title               --jq '.[] | select(.title == "[canary] Tophost upstream compatibility drift") | .number'               | head -n 1
           )"
 
           if [[ "$CANARY_CODE" == "30" ]]; then
-            gh label create upstream-drift               --repo "$GITHUB_REPOSITORY"               --color D73A4A               --description "Automated upstream compatibility regression"               --force
+            gh label create upstream-drift --repo "$GITHUB_REPOSITORY"               --color D73A4A               --description "Automated upstream compatibility regression"               --force
 
             body="$RUNNER_TEMP/upstream-drift.md"
             {
               echo "The scheduled read-only compatibility canary detected a Tophost upstream structure/protocol change."
               echo
-              echo "- Stage: \`$CANARY_STAGE\`"
-              echo "- Reason: \`$CANARY_REASON\`"
-              echo "- Parsed products: \`${PRODUCT_COUNT:-unknown}\`"
-              echo "- Parsed DNS records: \`${RECORD_COUNT:-unknown}\`"
-              echo "- Commit: \`$GITHUB_SHA\`"
+              echo "- Stage: `$CANARY_STAGE`"
+              echo "- Reason: `$CANARY_REASON`"
+              echo "- Parsed products: `${PRODUCT_COUNT:-unknown}`"
+              echo "- Parsed DNS records: `${RECORD_COUNT:-unknown}`"
+              echo "- Commit: `$GITHUB_SHA`"
               echo "- Run: $run_url"
               echo
               echo "No authenticated HTML, cookies, credentials, OTP values or domain names are included in this report."
             } > "$body"
 
             if [[ -z "$issue_number" ]]; then
-              gh issue create                 --repo "$GITHUB_REPOSITORY"                 --title "$title"                 --label upstream-drift                 --body-file "$body"
+              gh issue create --repo "$GITHUB_REPOSITORY"                 --title "$title"                 --label upstream-drift                 --body-file "$body"
             else
-              gh issue comment "$issue_number"                 --repo "$GITHUB_REPOSITORY"                 --body-file "$body"
+              gh issue comment "$issue_number" --repo "$GITHUB_REPOSITORY"                 --body-file "$body"
             fi
 
           elif [[ "$CANARY_CODE" == "0" && -n "$issue_number" ]]; then
-            gh issue comment "$issue_number"               --repo "$GITHUB_REPOSITORY"               --body "The compatibility canary recovered on run $run_url. Closing automatically."
+            gh issue comment "$issue_number" --repo "$GITHUB_REPOSITORY"               --body "The compatibility canary recovered on run $run_url. Closing automatically."
 
-            gh issue close "$issue_number"               --repo "$GITHUB_REPOSITORY"               --reason completed
+            gh issue close "$issue_number" --repo "$GITHUB_REPOSITORY"               --reason completed
           fi
 
       - name: Enforce canary result
