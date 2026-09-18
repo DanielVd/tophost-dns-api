@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/DanielVd/tophost-dns-api/actions/workflows/ci.yml/badge.svg)](https://github.com/DanielVd/tophost-dns-api/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Unofficial REST API for managing DNS records on Tophost accounts.
 
 > This project is not affiliated with, endorsed by, or supported by Tophost.
@@ -22,6 +23,8 @@ The project wraps the Tophost web control panel behind a structured Python servi
 - no-op detection
 - structured application errors
 - API key protection for `/v1`
+- scheduled read-only upstream compatibility canary
+- automatic GitHub issue creation for detected upstream drift
 - separation between HTTP protocol, service layer and REST API
 
 ## Architecture
@@ -333,6 +336,17 @@ Implementation notes are documented in
 
 Because this is an unofficial integration, upstream HTML or endpoint changes
 may require updates to the client.
+
+## Upstream compatibility canary
+
+A scheduled read-only canary exercises the same authentication, product
+discovery, control-panel SSO and DNS parsing path used by the API.
+
+True upstream compatibility drift creates or updates a deduplicated GitHub
+issue automatically, and a later successful run closes it.
+
+See [docs/canary.md](docs/canary.md) for the security model, exit codes and
+repository-secret setup.
 
 ## Status
 
