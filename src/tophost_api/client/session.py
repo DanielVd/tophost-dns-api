@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import errno
+import socket
+import ssl
+from collections.abc import Iterator
 from typing import Any
 
 import requests
@@ -11,6 +15,58 @@ DEFAULT_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/151.0.0.0 Safari/537.36"
 )
+
+
+def _exception_chain(exc: BaseException) -> Iterator[BaseException]:
+    pending = [exc]
+    seen: set[int] = set()
+
+    while pending:
+        current = pending.pop()
+        identity = id(current)
+
+        if identity in seen:
+            continue
+
+        seen.add(identity)
+        yield current
+
+        for nested in (
+            current.__cause__,
+            current.__context__,
+            getattr(current, "reason", None),
+            getattr(current, "_reason", None),
+        ):
+            if isinstance(nested, BaseException):
+                pending.append(nested)
+
+        for argument in current.args:
+            if isinstance(argument, BaseException):
+                pending.append(argument)
+
+
+def _connection_reason(exc: requests.ConnectionError) -> str:
+    for current in _exception_chain(exc):
+        if isinstance(current, socket.gaierror):
+            return "dns_resolution_error"
+
+        if isinstance(current, ssl.SSLError):
+            return "tls_error"
+
+        if isinstance(current, ConnectionRefusedError):
+            return "connection_refused"
+
+        if isinstance(current, ConnectionResetError):
+            return "connection_reset"
+
+        if isinstance(current, OSError):
+            if current.errno == errno.ECONNREFUSED:
+                return "connection_refused"
+
+            if current.errno == errno.ECONNRESET:
+                return "connection_reset"
+
+    return "connection_error"
 
 
 class TophostHTTPSession:
@@ -53,15 +109,30 @@ class TophostHTTPSession:
                 url,
                 **kwargs,
             )
+        except requests.ConnectTimeout as exc:
+            raise UpstreamUnavailableError(
+                "Tophost connection timed out",
+                reason="connect_timeout",
+            ) from exc
+        except requests.ReadTimeout as exc:
+            raise UpstreamUnavailableError(
+                "Tophost response timed out",
+                reason="read_timeout",
+            ) from exc
         except requests.Timeout as exc:
             raise UpstreamUnavailableError(
                 "Tophost request timed out",
                 reason="timeout",
             ) from exc
+        except requests.exceptions.SSLError as exc:
+            raise UpstreamUnavailableError(
+                "Tophost TLS connection failed",
+                reason="tls_error",
+            ) from exc
         except requests.ConnectionError as exc:
             raise UpstreamUnavailableError(
                 "Tophost connection failed",
-                reason="connection_error",
+                reason=_connection_reason(exc),
             ) from exc
         except requests.RequestException as exc:
             raise UpstreamUnavailableError(
