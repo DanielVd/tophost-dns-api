@@ -1,5 +1,7 @@
 # Tophost DNS API
 
+[![CI](https://github.com/DanielVd/tophost-dns-api/actions/workflows/ci.yml/badge.svg)](https://github.com/DanielVd/tophost-dns-api/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 Unofficial REST API for managing DNS records on Tophost accounts.
 
 > This project is not affiliated with, endorsed by, or supported by Tophost.
