@@ -136,6 +136,22 @@ def test_dns_page_parser():
     assert record.priority == 0
 
 
+def test_dns_page_parser_ignores_non_record_tr_rows():
+    html = f"""
+    <table>
+      <tr id="tr-template">
+        <td>UI helper row</td>
+      </tr>
+      {dns_html()}
+    </table>
+    """
+
+    records = DNSPageParser().parse(html)
+
+    assert len(records) == 1
+    assert records[0].id == RECORD_ID
+
+
 def test_dns_page_parser_rejects_partial_record():
     html = f"""
     <table>
