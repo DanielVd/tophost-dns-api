@@ -149,7 +149,7 @@ def _classified_error(
             status=CanaryStatus.TRANSIENT,
             exit_code=CanaryExit.TRANSIENT,
             stage=stage,
-            reason="upstream_unavailable",
+            reason=exc.reason,
             product_count=product_count,
         )
 

@@ -83,6 +83,15 @@ class UpstreamUnavailableError(TophostAPIError):
     code = ErrorCode.UPSTREAM_UNAVAILABLE
     retryable = True
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str = "upstream_unavailable",
+    ):
+        super().__init__(message)
+        self.reason = reason
+
 
 class UpstreamProtocolError(TophostAPIError):
     code = ErrorCode.UPSTREAM_PROTOCOL_ERROR
