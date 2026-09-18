@@ -390,9 +390,19 @@ class TophostAccountClient:
             response.status_code in {408, 425, 429}
             or response.status_code >= 500
         ):
+            if response.status_code == 408:
+                reason = "http_408"
+            elif response.status_code == 425:
+                reason = "http_425"
+            elif response.status_code == 429:
+                reason = "http_429"
+            else:
+                reason = "http_5xx"
+
             raise UpstreamUnavailableError(
                 "Tophost is temporarily unavailable: "
-                f"HTTP {response.status_code}"
+                f"HTTP {response.status_code}",
+                reason=reason,
             )
 
         if response.status_code >= 400:

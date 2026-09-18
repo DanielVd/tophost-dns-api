@@ -53,9 +53,20 @@ class TophostHTTPSession:
                 url,
                 **kwargs,
             )
+        except requests.Timeout as exc:
+            raise UpstreamUnavailableError(
+                "Tophost request timed out",
+                reason="timeout",
+            ) from exc
+        except requests.ConnectionError as exc:
+            raise UpstreamUnavailableError(
+                "Tophost connection failed",
+                reason="connection_error",
+            ) from exc
         except requests.RequestException as exc:
             raise UpstreamUnavailableError(
-                f"Tophost request failed: {exc}"
+                "Tophost request failed",
+                reason="request_error",
             ) from exc
 
     def get(

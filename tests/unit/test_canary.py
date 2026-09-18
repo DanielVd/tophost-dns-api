@@ -164,10 +164,13 @@ def test_canary_flags_empty_product_parse_as_drift():
     ("error", "status", "exit_code", "reason"),
     [
         (
-            UpstreamUnavailableError("temporary"),
+            UpstreamUnavailableError(
+                "temporary",
+                reason="timeout",
+            ),
             CanaryStatus.TRANSIENT,
             CanaryExit.TRANSIENT,
-            "upstream_unavailable",
+            "timeout",
         ),
         (
             OTPRequiredError("otp"),
