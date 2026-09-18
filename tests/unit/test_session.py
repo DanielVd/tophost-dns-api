@@ -46,7 +46,7 @@ def test_cookie_roundtrip():
             "timeout",
         ),
         (
-            requests.SSLError("details must not leak"),
+            requests.exceptions.SSLError("details must not leak"),
             "tls_error",
         ),
         (
