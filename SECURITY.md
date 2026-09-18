@@ -70,7 +70,9 @@ mutations.
 
 ## Reporting security issues
 
-Do not disclose suspected vulnerabilities through a public issue while a
-repository is public.
+Do not disclose suspected vulnerabilities through a public issue.
 
-Use a private communication channel provided by the repository owner.
+Use GitHub Private Vulnerability Reporting through the repository's `Security`
+tab and choose `Report a vulnerability`. If that option is temporarily
+unavailable, contact the repository owner privately using the contact details on
+their GitHub profile rather than opening a public issue.

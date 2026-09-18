@@ -173,7 +173,7 @@ def test_real_dns_crud():
                 )
                 print()
                 print("=== CLEANUP OK ===")
-            except Exception as exc:  # noqa: BLE001  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 print()
                 print(
                     "WARNING: automatic cleanup failed: "

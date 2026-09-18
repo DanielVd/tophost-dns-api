@@ -6,9 +6,14 @@ build-backend = "setuptools.build_meta"
 name = "tophost-dns-api"
 version = "0.1.0"
 description = "Unofficial Python API for managing Tophost DNS records"
+readme = "README.md"
+authors = [
+    { name = "Daniel Vedovato" },
+]
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
+keywords = ["tophost", "dns", "fastapi", "rest-api"]
 dependencies = [
     "fastapi>=0.115,<1",
     "pydantic>=2,<3",
@@ -17,6 +22,11 @@ dependencies = [
     "beautifulsoup4>=4.12,<5",
     "uvicorn>=0.30,<1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/DanielVd/tophost-dns-api"
+Repository = "https://github.com/DanielVd/tophost-dns-api"
+Issues = "https://github.com/DanielVd/tophost-dns-api/issues"
 
 [project.optional-dependencies]
 dev = [

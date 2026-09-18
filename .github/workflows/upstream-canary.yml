@@ -21,10 +21,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
           cache: pip
@@ -94,8 +94,6 @@ jobs:
               "status",
               "stage",
               "reason",
-              "product_count",
-              "record_count",
           )
 
           with open(output, "a", encoding="utf-8") as handle:
@@ -122,8 +120,6 @@ jobs:
           CANARY_CODE: ${{ steps.canary.outputs.exit_code }}
           CANARY_STAGE: ${{ steps.canary.outputs.stage }}
           CANARY_REASON: ${{ steps.canary.outputs.reason }}
-          PRODUCT_COUNT: ${{ steps.canary.outputs.product_count }}
-          RECORD_COUNT: ${{ steps.canary.outputs.record_count }}
         shell: bash
         run: |
           title='[canary] Tophost upstream compatibility drift'
@@ -142,8 +138,6 @@ jobs:
               echo
               echo "- Stage: `$CANARY_STAGE`"
               echo "- Reason: `$CANARY_REASON`"
-              echo "- Parsed products: `${PRODUCT_COUNT:-unknown}`"
-              echo "- Parsed DNS records: `${RECORD_COUNT:-unknown}`"
               echo "- Commit: `$GITHUB_SHA`"
               echo "- Run: $run_url"
               echo
