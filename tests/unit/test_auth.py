@@ -13,7 +13,7 @@ from tophost_api.client.auth import (
     TophostAccountClient,
 )
 from tophost_api.client.state import SecureStateStore
-from tophost_api.errors import OTPRequiredError
+from tophost_api.errors import OTPRequiredError, UpstreamUnavailableError
 
 
 def make_client(tmp_path: Path) -> TophostAccountClient:
@@ -175,3 +175,17 @@ def test_product_discovery_uses_authenticated_page(
     assert len(products) == 1
     assert products[0].domain == "example.com"
     assert products[0].product_id == "123456"
+
+@responses.activate
+def test_authenticate_treats_server_error_as_unavailable(
+    tmp_path: Path,
+):
+    client = make_client(tmp_path)
+
+    responses.get(
+        LOGIN_URL,
+        status=503,
+    )
+
+    with pytest.raises(UpstreamUnavailableError):
+        client.authenticate()

@@ -67,7 +67,10 @@ class ProductParser:
             domain = self._find_domain_for_anchor(anchor)
 
             if domain is None:
-                continue
+                raise UpstreamProtocolError(
+                    "Tophost product link could not be associated "
+                    "with exactly one domain"
+                )
 
             product = TophostProduct(
                 domain=domain,

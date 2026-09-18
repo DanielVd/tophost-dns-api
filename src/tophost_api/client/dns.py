@@ -12,6 +12,7 @@ from tophost_api.errors import (
     RecordChangedError,
     RecordNotFoundError,
     UpstreamProtocolError,
+    UpstreamUnavailableError,
 )
 from tophost_api.models import (
     DNSMutationResult,
@@ -33,7 +34,12 @@ DNS_DEL_URL = f"{CP_BASE_URL}/x-dns-del"
 class DNSPageParser:
     """Parse DNS records from the Tophost control-panel HTML."""
 
-    def parse(self, page_html: str) -> list[DNSRecord]:
+    def parse(
+        self,
+        page_html: str,
+        *,
+        zone_name: str,
+    ) -> list[DNSRecord]:
         soup = BeautifulSoup(page_html, "html.parser")
         records: list[DNSRecord] = []
 
@@ -54,6 +60,27 @@ class DNSPageParser:
             if not record_id:
                 continue
 
+            markers = {
+                "name": row.find(id=f"name-{record_id}"),
+                "type": row.find(id=f"type-{record_id}"),
+                "value": row.find(id=f"value-{record_id}"),
+                "valueo": row.find(
+                    "input",
+                    attrs={"name": f"valueo-{record_id}"},
+                ),
+                "priorityo": row.find(
+                    "input",
+                    attrs={"name": f"priorityo-{record_id}"},
+                ),
+            }
+
+            if not any(
+                isinstance(marker, Tag)
+                for marker in markers.values()
+            ):
+                # Tophost also uses tr-* IDs for non-record rows.
+                continue
+
             name = self._cell_text(
                 row,
                 f"name-{record_id}",
@@ -67,8 +94,23 @@ class DNSPageParser:
                 f"value-{record_id}",
             )
 
-            if name is None or record_type is None or value is None:
-                continue
+            if record_type is None or value is None:
+                raise UpstreamProtocolError(
+                    "Tophost DNS record row has an unexpected structure"
+                )
+
+            if name is None:
+                table = row.find_parent("table")
+
+                if (
+                    isinstance(table, Tag)
+                    and table.get("id") == "dns-soa"
+                ):
+                    name = zone_name
+                else:
+                    raise UpstreamProtocolError(
+                        "Tophost DNS record row has no resolvable name"
+                    )
 
             priority_input = row.find(
                 "input",
@@ -139,10 +181,19 @@ class TophostDNSClient:
         self.product: TophostProduct | None = None
         self.connected = False
 
-    def connect(self) -> TophostProduct:
-        product = self.account.resolve_product(
-            self.domain
-        )
+    def connect(
+        self,
+        *,
+        product: TophostProduct | None = None,
+    ) -> TophostProduct:
+        if product is None:
+            product = self.account.resolve_product(
+                self.domain
+            )
+        elif product.domain != self.domain:
+            raise UpstreamProtocolError(
+                "Pre-resolved Tophost product does not match requested domain"
+            )
 
         response = self.account.http.get(
             product.control_panel_href,
@@ -173,7 +224,8 @@ class TophostDNSClient:
         self._ensure_cp_response(response)
 
         return self.parser.parse(
-            response.text
+            response.text,
+            zone_name=self.domain,
         )
 
     def get_record(
@@ -443,6 +495,15 @@ class TophostDNSClient:
     def _check_http_response(
         response,
     ) -> None:
+        if (
+            response.status_code in {408, 425, 429}
+            or response.status_code >= 500
+        ):
+            raise UpstreamUnavailableError(
+                "Tophost control panel is temporarily unavailable: "
+                f"HTTP {response.status_code}"
+            )
+
         if response.status_code >= 400:
             raise UpstreamProtocolError(
                 "Unexpected Tophost control-panel HTTP response: "

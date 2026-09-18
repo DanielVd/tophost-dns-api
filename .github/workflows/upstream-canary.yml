@@ -1,0 +1,193 @@
+name: Upstream Canary
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+      timezone: "Europe/Rome"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    name: Tophost compatibility
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Restore trusted 2FA state
+        env:
+          TOPHOST_TRUST_B64: ${{ secrets.TOPHOST_TRUST_B64 }}
+        shell: bash
+        run: |
+          state_dir="$RUNNER_TEMP/tophost-state"
+          trust_file="$state_dir/2fa.json"
+
+          install -d -m 700 "$state_dir"
+
+          if [[ -n "$TOPHOST_TRUST_B64" ]]; then
+            printf '%s' "$TOPHOST_TRUST_B64" | base64 --decode > "$trust_file"
+            chmod 600 "$trust_file"
+            python -m json.tool "$trust_file" >/dev/null
+          fi
+
+      - name: Run read-only compatibility canary
+        id: canary
+        env:
+          TOPHOST_USER: ${{ secrets.TOPHOST_USER }}
+          TOPHOST_PASS: ${{ secrets.TOPHOST_PASS }}
+          TOPHOST_DEFAULT_DOMAIN: ${{ secrets.TOPHOST_DEFAULT_DOMAIN }}
+          TOPHOST_STATE_DIR: ${{ runner.temp }}/tophost-state
+          TOPHOST_REQUEST_TIMEOUT: "20"
+          TOPHOST_CANARY_REQUIRE_RECORDS: "true"
+        shell: bash
+        run: |
+          result="$RUNNER_TEMP/tophost-canary.json"
+          code=1
+
+          for attempt in 1 2 3; do
+            set +e
+            python -m tophost_api.canary > "$result"
+            code=$?
+            set -e
+
+            if [[ "$code" != "10" ]]; then
+              break
+            fi
+
+            if [[ "$attempt" -lt 3 ]]; then
+              sleep $((attempt * 15))
+            fi
+          done
+
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+          python - "$result" "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY" <<'PY'
+          import json
+          import sys
+
+          path, output, summary = sys.argv[1:]
+
+          with open(path, encoding="utf-8") as handle:
+              data = json.load(handle)
+
+          allowed = (
+              "status",
+              "stage",
+              "reason",
+              "product_count",
+              "record_count",
+          )
+
+          with open(output, "a", encoding="utf-8") as handle:
+              for key in allowed:
+                  value = data.get(key)
+                  if value is not None:
+                      print(f"{key}={value}", file=handle)
+
+          with open(summary, "a", encoding="utf-8") as handle:
+              print("### Tophost upstream canary", file=handle)
+              print(file=handle)
+
+              for key in allowed:
+                  value = data.get(key)
+                  if value is not None:
+                      label = key.replace("_", " ").title()
+                      print(f"- {label}: `{value}`", file=handle)
+          PY
+
+      - name: Manage upstream drift issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANARY_CODE: ${{ steps.canary.outputs.exit_code }}
+          CANARY_STAGE: ${{ steps.canary.outputs.stage }}
+          CANARY_REASON: ${{ steps.canary.outputs.reason }}
+          PRODUCT_COUNT: ${{ steps.canary.outputs.product_count }}
+          RECORD_COUNT: ${{ steps.canary.outputs.record_count }}
+        shell: bash
+        run: |
+          title='[canary] Tophost upstream compatibility drift'
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+          issue_number="$(
+            gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100               --json number,title               --jq '.[] | select(.title == "[canary] Tophost upstream compatibility drift") | .number'               | head -n 1
+          )"
+
+          if [[ "$CANARY_CODE" == "30" ]]; then
+            gh label create upstream-drift --repo "$GITHUB_REPOSITORY"               --color D73A4A               --description "Automated upstream compatibility regression"               --force
+
+            body="$RUNNER_TEMP/upstream-drift.md"
+            {
+              echo "The scheduled read-only compatibility canary detected a Tophost upstream structure/protocol change."
+              echo
+              echo "- Stage: `$CANARY_STAGE`"
+              echo "- Reason: `$CANARY_REASON`"
+              echo "- Parsed products: `${PRODUCT_COUNT:-unknown}`"
+              echo "- Parsed DNS records: `${RECORD_COUNT:-unknown}`"
+              echo "- Commit: `$GITHUB_SHA`"
+              echo "- Run: $run_url"
+              echo
+              echo "No authenticated HTML, cookies, credentials, OTP values or domain names are included in this report."
+            } > "$body"
+
+            if [[ -z "$issue_number" ]]; then
+              gh issue create --repo "$GITHUB_REPOSITORY"                 --title "$title"                 --label upstream-drift                 --body-file "$body"
+            else
+              gh issue comment "$issue_number" --repo "$GITHUB_REPOSITORY"                 --body-file "$body"
+            fi
+
+          elif [[ "$CANARY_CODE" == "0" && -n "$issue_number" ]]; then
+            gh issue comment "$issue_number" --repo "$GITHUB_REPOSITORY"               --body "The compatibility canary recovered on run $run_url. Closing automatically."
+
+            gh issue close "$issue_number" --repo "$GITHUB_REPOSITORY"               --reason completed
+          fi
+
+      - name: Enforce canary result
+        if: always()
+        env:
+          CANARY_CODE: ${{ steps.canary.outputs.exit_code }}
+          CANARY_STAGE: ${{ steps.canary.outputs.stage }}
+          CANARY_REASON: ${{ steps.canary.outputs.reason }}
+        shell: bash
+        run: |
+          case "$CANARY_CODE" in
+            0)
+              exit 0
+              ;;
+            10)
+              echo "::error::Persistent transient Tophost failure after retries ($CANARY_STAGE/$CANARY_REASON)"
+              exit 1
+              ;;
+            20)
+              echo "::error::Tophost canary needs authentication/configuration attention ($CANARY_STAGE/$CANARY_REASON)"
+              exit 1
+              ;;
+            30)
+              echo "::error::Tophost upstream compatibility drift detected ($CANARY_STAGE/$CANARY_REASON)"
+              exit 1
+              ;;
+            *)
+              echo "::error::Unexpected canary failure"
+              exit 1
+              ;;
+          esac

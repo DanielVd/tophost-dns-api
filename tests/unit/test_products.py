@@ -4,6 +4,7 @@ from tophost_api.client.products import ProductParser
 from tophost_api.errors import (
     AmbiguousDomainError,
     DomainNotFoundError,
+    UpstreamProtocolError,
 )
 
 
@@ -165,6 +166,5 @@ def test_does_not_guess_across_product_boundary():
     </main>
     """
 
-    products = ProductParser().parse(html)
-
-    assert products == []
+    with pytest.raises(UpstreamProtocolError):
+        ProductParser().parse(html)
