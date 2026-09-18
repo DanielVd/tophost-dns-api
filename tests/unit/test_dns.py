@@ -152,6 +152,124 @@ def test_dns_page_parser_ignores_non_record_tr_rows():
     assert records[0].id == RECORD_ID
 
 
+def test_dns_page_parser_inherits_name_for_contiguous_group():
+    second_id = "11111111111111111111111111111111"
+    third_id = "22222222222222222222222222222222"
+
+    html = f"""
+    <table>
+      <tr id="tr-{RECORD_ID}">
+        <td id="name-{RECORD_ID}">example.com</td>
+        <td id="type-{RECORD_ID}">A</td>
+        <td id="value-{RECORD_ID}">192.0.2.10</td>
+      </tr>
+      <tr id="tr-{second_id}">
+        <input
+          type="hidden"
+          name="valueo-{second_id}"
+          value="mail.example.net"
+        />
+        <input
+          type="hidden"
+          name="priorityo-{second_id}"
+          value="10"
+        />
+        <td id="type-{second_id}">MX</td>
+        <td id="priority-{second_id}">10</td>
+        <td id="value-{second_id}">mail.example.net</td>
+      </tr>
+      <tr id="tr-{third_id}">
+        <input
+          type="hidden"
+          name="valueo-{third_id}"
+          value="ns1.example.net"
+        />
+        <input
+          type="hidden"
+          name="priorityo-{third_id}"
+          value="0"
+        />
+        <td id="type-{third_id}">NS</td>
+        <td id="priority-{third_id}"></td>
+        <td id="value-{third_id}">ns1.example.net</td>
+      </tr>
+    </table>
+    """
+
+    records = DNSPageParser().parse(html)
+
+    assert len(records) == 3
+    assert [record.name for record in records] == [
+        "example.com",
+        "example.com",
+        "example.com",
+    ]
+    assert [record.type for record in records] == [
+        "A",
+        "MX",
+        "NS",
+    ]
+
+
+def test_dns_page_parser_rejects_orphan_nameless_record():
+    html = f"""
+    <table>
+      <tr id="tr-{RECORD_ID}">
+        <input
+          type="hidden"
+          name="valueo-{RECORD_ID}"
+          value="mail.example.net"
+        />
+        <input
+          type="hidden"
+          name="priorityo-{RECORD_ID}"
+          value="10"
+        />
+        <td id="type-{RECORD_ID}">MX</td>
+        <td id="value-{RECORD_ID}">mail.example.net</td>
+      </tr>
+    </table>
+    """
+
+    with pytest.raises(
+        UpstreamProtocolError,
+        match="no resolvable name",
+    ):
+        DNSPageParser().parse(html)
+
+
+def test_dns_page_parser_does_not_inherit_across_non_dns_row():
+    second_id = "11111111111111111111111111111111"
+
+    html = f"""
+    <table>
+      <tr id="tr-{RECORD_ID}">
+        <td id="name-{RECORD_ID}">example.com</td>
+        <td id="type-{RECORD_ID}">A</td>
+        <td id="value-{RECORD_ID}">192.0.2.10</td>
+      </tr>
+      <tr id="tr-ui-helper">
+        <td>separator</td>
+      </tr>
+      <tr id="tr-{second_id}">
+        <input
+          type="hidden"
+          name="valueo-{second_id}"
+          value="mail.example.net"
+        />
+        <td id="type-{second_id}">MX</td>
+        <td id="value-{second_id}">mail.example.net</td>
+      </tr>
+    </table>
+    """
+
+    with pytest.raises(
+        UpstreamProtocolError,
+        match="no resolvable name",
+    ):
+        DNSPageParser().parse(html)
+
+
 def test_dns_page_parser_rejects_partial_record():
     html = f"""
     <table>
