@@ -38,21 +38,32 @@ class DNSPageParser:
         soup = BeautifulSoup(page_html, "html.parser")
         records: list[DNSRecord] = []
 
+        active_name: str | None = None
+        previous_row_was_dns = False
+
         for row in soup.find_all("tr"):
             if not isinstance(row, Tag):
+                previous_row_was_dns = False
+                active_name = None
                 continue
 
             row_id = row.get("id")
 
             if not isinstance(row_id, str):
+                previous_row_was_dns = False
+                active_name = None
                 continue
 
             if not row_id.startswith("tr-"):
+                previous_row_was_dns = False
+                active_name = None
                 continue
 
             record_id = row_id.removeprefix("tr-")
 
             if not record_id:
+                previous_row_was_dns = False
+                active_name = None
                 continue
 
             markers = {
@@ -74,7 +85,9 @@ class DNSPageParser:
                 for marker in markers.values()
             ):
                 # Tophost also uses tr-* IDs for non-record rows.
-                # Ignore only rows that have none of the DNS markers.
+                # A non-DNS row also terminates any implicit DNS-name group.
+                previous_row_was_dns = False
+                active_name = None
                 continue
 
             name = self._cell_text(
@@ -90,10 +103,19 @@ class DNSPageParser:
                 f"value-{record_id}",
             )
 
-            if name is None or record_type is None or value is None:
+            if record_type is None or value is None:
                 raise UpstreamProtocolError(
                     "Tophost DNS record row has an unexpected structure"
                 )
+
+            if name is not None:
+                active_name = name
+            elif not previous_row_was_dns or active_name is None:
+                raise UpstreamProtocolError(
+                    "Tophost DNS record row has no resolvable name"
+                )
+
+            name = active_name
 
             priority_input = row.find(
                 "input",
@@ -126,6 +148,8 @@ class DNSPageParser:
                     priority=priority,
                 )
             )
+
+            previous_row_was_dns = True
 
         return records
 
