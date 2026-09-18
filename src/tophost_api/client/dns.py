@@ -34,36 +34,30 @@ DNS_DEL_URL = f"{CP_BASE_URL}/x-dns-del"
 class DNSPageParser:
     """Parse DNS records from the Tophost control-panel HTML."""
 
-    def parse(self, page_html: str) -> list[DNSRecord]:
+    def parse(
+        self,
+        page_html: str,
+        *,
+        zone_name: str,
+    ) -> list[DNSRecord]:
         soup = BeautifulSoup(page_html, "html.parser")
         records: list[DNSRecord] = []
 
-        active_name: str | None = None
-        previous_row_was_dns = False
-
         for row in soup.find_all("tr"):
             if not isinstance(row, Tag):
-                previous_row_was_dns = False
-                active_name = None
                 continue
 
             row_id = row.get("id")
 
             if not isinstance(row_id, str):
-                previous_row_was_dns = False
-                active_name = None
                 continue
 
             if not row_id.startswith("tr-"):
-                previous_row_was_dns = False
-                active_name = None
                 continue
 
             record_id = row_id.removeprefix("tr-")
 
             if not record_id:
-                previous_row_was_dns = False
-                active_name = None
                 continue
 
             markers = {
@@ -85,9 +79,6 @@ class DNSPageParser:
                 for marker in markers.values()
             ):
                 # Tophost also uses tr-* IDs for non-record rows.
-                # A non-DNS row also terminates any implicit DNS-name group.
-                previous_row_was_dns = False
-                active_name = None
                 continue
 
             name = self._cell_text(
@@ -108,14 +99,18 @@ class DNSPageParser:
                     "Tophost DNS record row has an unexpected structure"
                 )
 
-            if name is not None:
-                active_name = name
-            elif not previous_row_was_dns or active_name is None:
-                raise UpstreamProtocolError(
-                    "Tophost DNS record row has no resolvable name"
-                )
+            if name is None:
+                table = row.find_parent("table")
 
-            name = active_name
+                if (
+                    isinstance(table, Tag)
+                    and table.get("id") == "dns-soa"
+                ):
+                    name = zone_name
+                else:
+                    raise UpstreamProtocolError(
+                        "Tophost DNS record row has no resolvable name"
+                    )
 
             priority_input = row.find(
                 "input",
@@ -148,8 +143,6 @@ class DNSPageParser:
                     priority=priority,
                 )
             )
-
-            previous_row_was_dns = True
 
         return records
 
@@ -231,7 +224,8 @@ class TophostDNSClient:
         self._ensure_cp_response(response)
 
         return self.parser.parse(
-            response.text
+            response.text,
+            zone_name=self.domain,
         )
 
     def get_record(

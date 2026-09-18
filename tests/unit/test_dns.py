@@ -122,7 +122,8 @@ def mock_sso():
 
 def test_dns_page_parser():
     records = DNSPageParser().parse(
-        dns_html()
+        dns_html(),
+        zone_name="example.com",
     )
 
     assert len(records) == 1
@@ -146,66 +147,75 @@ def test_dns_page_parser_ignores_non_record_tr_rows():
     </table>
     """
 
-    records = DNSPageParser().parse(html)
+    records = DNSPageParser().parse(
+        html,
+        zone_name="example.com",
+    )
 
     assert len(records) == 1
     assert records[0].id == RECORD_ID
 
 
-def test_dns_page_parser_inherits_name_for_contiguous_group():
+def test_dns_page_parser_uses_zone_name_for_dns_soa_rows():
     second_id = "11111111111111111111111111111111"
     third_id = "22222222222222222222222222222222"
 
     html = f"""
-    <table>
-      <tr id="tr-{RECORD_ID}">
-        <td id="name-{RECORD_ID}">example.com</td>
-        <td id="type-{RECORD_ID}">A</td>
-        <td id="value-{RECORD_ID}">192.0.2.10</td>
-      </tr>
-      <tr id="tr-{second_id}">
-        <input
-          type="hidden"
-          name="valueo-{second_id}"
-          value="mail.example.net"
-        />
-        <input
-          type="hidden"
-          name="priorityo-{second_id}"
-          value="10"
-        />
-        <td id="type-{second_id}">MX</td>
-        <td id="priority-{second_id}">10</td>
-        <td id="value-{second_id}">mail.example.net</td>
-      </tr>
-      <tr id="tr-{third_id}">
-        <input
-          type="hidden"
-          name="valueo-{third_id}"
-          value="ns1.example.net"
-        />
-        <input
-          type="hidden"
-          name="priorityo-{third_id}"
-          value="0"
-        />
-        <td id="type-{third_id}">NS</td>
-        <td id="priority-{third_id}"></td>
-        <td id="value-{third_id}">ns1.example.net</td>
-      </tr>
+    <table id="dns-soa">
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Priorità</th>
+          <th>Valore</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr id="tr-{second_id}">
+          <input
+            type="hidden"
+            name="valueo-{second_id}"
+            value="mail.example.net"
+          />
+          <input
+            type="hidden"
+            name="priorityo-{second_id}"
+            value="10"
+          />
+          <td id="type-{second_id}">MX</td>
+          <td id="priority-{second_id}">10</td>
+          <td id="value-{second_id}">mail.example.net</td>
+        </tr>
+        <tr id="tr-{third_id}">
+          <input
+            type="hidden"
+            name="valueo-{third_id}"
+            value="ns1.example.net"
+          />
+          <input
+            type="hidden"
+            name="priorityo-{third_id}"
+            value="0"
+          />
+          <td id="type-{third_id}">NS</td>
+          <td id="priority-{third_id}"></td>
+          <td id="value-{third_id}">ns1.example.net</td>
+        </tr>
+      </tbody>
     </table>
     """
 
-    records = DNSPageParser().parse(html)
+    records = DNSPageParser().parse(
+        html,
+        zone_name="example.com",
+    )
 
-    assert len(records) == 3
+    assert len(records) == 2
     assert [record.name for record in records] == [
-        "example.com",
         "example.com",
         "example.com",
     ]
     assert [record.type for record in records] == [
-        "A",
         "MX",
         "NS",
     ]
@@ -235,7 +245,10 @@ def test_dns_page_parser_rejects_orphan_nameless_record():
         UpstreamProtocolError,
         match="no resolvable name",
     ):
-        DNSPageParser().parse(html)
+        DNSPageParser().parse(
+            html,
+            zone_name="example.com",
+        )
 
 
 def test_dns_page_parser_does_not_inherit_across_non_dns_row():
@@ -267,7 +280,10 @@ def test_dns_page_parser_does_not_inherit_across_non_dns_row():
         UpstreamProtocolError,
         match="no resolvable name",
     ):
-        DNSPageParser().parse(html)
+        DNSPageParser().parse(
+            html,
+            zone_name="example.com",
+        )
 
 
 def test_dns_page_parser_rejects_partial_record():
@@ -281,7 +297,10 @@ def test_dns_page_parser_rejects_partial_record():
     """
 
     with pytest.raises(UpstreamProtocolError):
-        DNSPageParser().parse(html)
+        DNSPageParser().parse(
+            html,
+            zone_name="example.com",
+        )
 
 
 @responses.activate
