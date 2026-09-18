@@ -55,6 +55,28 @@ class DNSPageParser:
             if not record_id:
                 continue
 
+            markers = {
+                "name": row.find(id=f"name-{record_id}"),
+                "type": row.find(id=f"type-{record_id}"),
+                "value": row.find(id=f"value-{record_id}"),
+                "valueo": row.find(
+                    "input",
+                    attrs={"name": f"valueo-{record_id}"},
+                ),
+                "priorityo": row.find(
+                    "input",
+                    attrs={"name": f"priorityo-{record_id}"},
+                ),
+            }
+
+            if not any(
+                isinstance(marker, Tag)
+                for marker in markers.values()
+            ):
+                # Tophost also uses tr-* IDs for non-record rows.
+                # Ignore only rows that have none of the DNS markers.
+                continue
+
             name = self._cell_text(
                 row,
                 f"name-{record_id}",
