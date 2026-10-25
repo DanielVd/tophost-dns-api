@@ -156,32 +156,56 @@ jobs:
             gh issue close "$issue_number" --repo "$GITHUB_REPOSITORY"               --reason completed
           fi
 
+      - name: Upload sanitized canary result
+        if: always() && steps.canary.outputs.exit_code != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: canary-result
+          path: ${{ runner.temp }}/tophost-canary.json
+          retention-days: 14
+          if-no-files-found: error
+
       - name: Enforce canary result
         if: always()
         env:
+          GH_TOKEN: ${{ github.token }}
           CANARY_CODE: ${{ steps.canary.outputs.exit_code }}
           CANARY_STAGE: ${{ steps.canary.outputs.stage }}
           CANARY_REASON: ${{ steps.canary.outputs.reason }}
         shell: bash
         run: |
-          case "$CANARY_CODE" in
-            0)
-              exit 0
-              ;;
-            10)
-              echo "::error::Persistent transient Tophost failure after retries ($CANARY_STAGE/$CANARY_REASON)"
-              exit 1
-              ;;
-            20)
-              echo "::error::Tophost canary needs authentication/configuration attention ($CANARY_STAGE/$CANARY_REASON)"
-              exit 1
-              ;;
-            30)
-              echo "::error::Tophost upstream compatibility drift detected ($CANARY_STAGE/$CANARY_REASON)"
-              exit 1
-              ;;
-            *)
-              echo "::error::Unexpected canary failure"
-              exit 1
-              ;;
-          esac
+          if [[ -z "$CANARY_CODE" ]]; then
+            echo "::error::Canary did not produce a result"
+            exit 1
+          fi
+
+          history=()
+          if [[ "$CANARY_CODE" == "10" && "$GITHUB_EVENT_NAME" == "schedule" ]]; then
+            # Ignore this in-progress run; inspect only the previous two
+            # completed scheduled runs, newest first. Missing artifacts
+            # break the streak rather than being mistaken for failures.
+            mapfile -t previous_ids < <(
+              gh run list --repo "$GITHUB_REPOSITORY" \
+                --workflow upstream-canary.yml \
+                --event schedule --limit 10 \
+                --json databaseId,status \
+                --jq '[.[] | select(.status == "completed") | .databaseId][:2][]'
+            )
+
+            for index in 0 1; do
+              file="$RUNNER_TEMP/previous-$index/tophost-canary.json"
+              mkdir -p "$(dirname "$file")"
+
+              if [[ -n "${previous_ids[$index]:-}" ]]; then
+                gh run download "${previous_ids[$index]}" \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --name canary-result \
+                  --dir "$(dirname "$file")" >/dev/null 2>&1 || true
+              fi
+
+              history+=("$file")
+            done
+          fi
+
+          python scripts/canary_enforce.py \
+            "$RUNNER_TEMP/tophost-canary.json" "${history[@]}"
